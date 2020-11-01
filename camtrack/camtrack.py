@@ -38,13 +38,6 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
         raise NotImplementedError()
 
     MAX_REPROJECTION_ERROR = 1.6
-    MIN_TRIANGULATION_ANGLE_DEG = 2.39
-    MIN_DEPTH = 0.1
-    RETRIANGULATION_RANSAC_ITERS = 4
-    POSES_RECALC_ITERS = 4
-    RETRIANGULATE_ITERS = 5
-    MAX_RETRIANGULATES_PER_ITER = 1000
-    RETRIANGULATION_FRAME_LIMIT = 25
 
     rgb_sequence = frameseq.read_rgb_f32(frame_sequence_path)
     intrinsic_mat = to_opencv_camera_mat3x3(
@@ -54,6 +47,10 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
 
     # TODO: implement
     frame_count = len(corner_storage)
+    t_vecs = [None] * frame_count
+    t_vecs[known_view_1[0]] = known_view_1[1].t_vec
+    t_vecs[known_view_2[0]] = known_view_2[1].t_vec
+    print(known_view_1[1].t_vec, known_view_2[1].t_vec)
     view_mats = [None] * frame_count # позиции камеры на всех кадрах
     view_mats[known_view_1[0]] = pose_to_view_mat3x4(known_view_1[1])
     view_mats[known_view_2[0]] = pose_to_view_mat3x4(known_view_2[1])
@@ -111,6 +108,8 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
                 frames.append(ind)
         return frames
 
+    
+
     frames_of_corner = {}
     for i, corners in enumerate(corner_storage):
         for id_in_list, j in enumerate(corners.ids.flatten()):
@@ -127,10 +126,14 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
                 frames.append(frame)
         if len(frames) < 2:
             return
+        
+        min_len = 0
+
         for frame_1 in frames:
             for frame_2 in frames:
                 if frame_1 == frame_2:
                     continue
+                
                 
 
 
