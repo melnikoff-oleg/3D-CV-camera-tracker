@@ -38,6 +38,7 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
         raise NotImplementedError()
 
     MAX_REPROJECTION_ERROR = 1.6
+    MIN_DIST_TRIANGULATE = 0.01
 
     rgb_sequence = frameseq.read_rgb_f32(frame_sequence_path)
     intrinsic_mat = to_opencv_camera_mat3x3(
@@ -50,7 +51,7 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
     t_vecs = [None] * frame_count
     t_vecs[known_view_1[0]] = known_view_1[1].t_vec
     t_vecs[known_view_2[0]] = known_view_2[1].t_vec
-    print(known_view_1[1].t_vec, known_view_2[1].t_vec)
+    # print(known_view_1[1].t_vec, known_view_2[1].t_vec)
     view_mats = [None] * frame_count # позиции камеры на всех кадрах
     view_mats[known_view_1[0]] = pose_to_view_mat3x4(known_view_1[1])
     view_mats[known_view_2[0]] = pose_to_view_mat3x4(known_view_2[1])
@@ -109,17 +110,17 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
         return frames
 
     
-
+    cur_corners_occurencies = {}
     frames_of_corner = {}
     for i, corners in enumerate(corner_storage):
         for id_in_list, j in enumerate(corners.ids.flatten()):
+            cur_corners_occurencies[j] = 0
             if j not in frames_of_corner.keys():
                 frames_of_corner[j] = [[i, id_in_list]]
             else:
                 frames_of_corner[j].append([i, id_in_list])
 
     def try_add_new_point_to_cloud(corner_id):
-        best_frames = [None, None]
         frames = []
         for frame in frames_of_corner[corner_id]:
             if view_mats[frame[0]] is not None:
@@ -127,15 +128,43 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
         if len(frames) < 2:
             return
         
-        min_len = 0
+        max_dist = 0
+        best_frames = [None, None]
+        best_ids = [None, None]
 
         for frame_1 in frames:
             for frame_2 in frames:
                 if frame_1 == frame_2:
                     continue
+                t_vec_1 = t_vecs[frame_1[0]]
+                t_vec_2 = t_vecs[frame_2[0]]
+                dist = np.linalg.norm(t_vec_1 - t_vec_2)
+                if max_dist < dist:
+                    max_dist = dist
+                    best_frames = [frame_1[0], frame_2[0]]
+                    best_ids = [frame_1[1], frame_2[1]]
+        if max_dist > MIN_DIST_TRIANGULATE:
+            ids = np.array([corner_id])
+            points1 = corner_storage[best_frames[0]].points[np.array([best_ids[0]])]
+            points2 = corner_storage[best_frames[1]].points[np.array([best_ids[1]])]
+            corrs = corrs = Correspondences(
+                ids,
+                points1,
+                points2
+            )
+            points3d, ids, med_cos = triangulate_correspondences(corrs, view_mats[best_frames[0]], view_mats[best_frames[1]], intrinsic_mat, parameters=TriangulationParameters(2, 1e-3, 1e-4))
+            if len(points3d) > 0:
+                points_cloud[ids[0]] = points3d[0]
+                cur_corners_occurencies.pop(ids[0], None)
                 
-                
-
+    def add_corners_occurencies(frame_id):
+        two_and_greater = []
+        for id in corner_storage[frame_id].ids.flatten():
+            if id in cur_corners_occurencies.keys():
+                cur_corners_occurencies[id] += 1
+                if cur_corners_occurencies[id] >= 2:
+                    two_and_greater.append(id)
+        return two_and_greater
 
     while len(frames_without_pose()) > 0:
         # пока есть не найденные положения камеры будем искать лучшее для восстановления
@@ -158,11 +187,15 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
         if max_col == -1:
             # больше позиции камер не находятся
             break
+        try_add = add_corners_occurencies(best_frame_id)
+        for corner in try_add:
+            try_add_new_point_to_cloud(corner)
         print('Now we add camera pose on {}-th frame, camera pose was calculated by {} inliers'.format(best_frame_id, max_col))
         ttl_poses_calculated = np.sum([mat is not None for mat in view_mats])
         percent = "{:.0f}".format(ttl_poses_calculated / frame_count * 100.0)
         print('{}% poses calculated'.format(percent))
         view_mats[best_frame_id] = rodrigues_and_translation_to_view_mat3x4(best_R, best_t)
+        t_vecs[best_frame_id] = best_t
         print('{} points in 3D points cloud'.format(len(points_cloud)))
 
     last_view_mat = None

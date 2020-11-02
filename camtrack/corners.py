@@ -55,12 +55,21 @@ def remove_old_points(image_0, image_1, ids, points, sizes, depth):
     status = None
     err = None
     next_pts, status, err = cv2.calcOpticalFlowPyrLK(image_0_pyramid[0], image_1_pyramid[0], np.array(points, dtype=np.float32).reshape(-1, 2), None, status, err, WIN_SIZE, PYRAMID_DEPTH, (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.002))
+
+    prev_pts, prev_status, prev_err  = cv2.calcOpticalFlowPyrLK(image_1_pyramid[0], image_0_pyramid[0], np.array(next_pts, dtype=np.float32).reshape(-1, 2), None, status, err, WIN_SIZE, PYRAMID_DEPTH, (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.002))
+
     status = np.ravel(status)
-    cur_points = (status == 1)
-    a = list(np.asarray(ids)[cur_points])
-    b = list(np.asarray(next_pts)[cur_points])
-    c = list(np.asarray(sizes)[cur_points])
-    return (a, b, c)
+    prev_status = prev_status.ravel()
+    import math
+    distances = np.array([math.sqrt(x * x + y * y) for (x, y) in np.reshape(points - prev_pts, (-1, 2))])
+
+    good_corners = (status == 1) & (prev_status == 1) & (distances < 0.7)
+    return (list(np.asarray(ids)[good_corners]), list(np.asarray(next_pts)[good_corners]), list(np.asarray(sizes)[good_corners]))
+    # cur_points = (status == 1)
+    # a = list(np.asarray(ids)[cur_points])
+    # b = list(np.asarray(next_pts)[cur_points])
+    # c = list(np.asarray(sizes)[cur_points])
+    # return (a, b, c)
  
 def add_new_points(image_1, ids, points, sizes, next_id, mask, first_frame=False):
     depth, image_1_pyramid = cv2.buildOpticalFlowPyramid((image_1 * 255).astype(np.uint8), WIN_SIZE, PYRAMID_DEPTH, None, False)
