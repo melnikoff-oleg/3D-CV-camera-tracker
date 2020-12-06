@@ -54,9 +54,9 @@ def remove_old_points(image_0, image_1, ids, points, sizes, depth):
     next_pts = None
     status = None
     err = None
-    next_pts, status, err = cv2.calcOpticalFlowPyrLK(image_0_pyramid[0], image_1_pyramid[0], np.array(points, dtype=np.float32).reshape(-1, 2), None, status, err, WIN_SIZE, PYRAMID_DEPTH, (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.002))
+    next_pts, status, err = cv2.calcOpticalFlowPyrLK(image_0_pyramid[0], image_1_pyramid[0], np.array(points, dtype=np.float32).reshape(-1, 2), None, status, err, WIN_SIZE, PYRAMID_DEPTH, (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, QUALITY_LEVEL))
 
-    prev_pts, prev_status, prev_err  = cv2.calcOpticalFlowPyrLK(image_1_pyramid[0], image_0_pyramid[0], np.array(next_pts, dtype=np.float32).reshape(-1, 2), None, status, err, WIN_SIZE, PYRAMID_DEPTH, (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.002))
+    prev_pts, prev_status, prev_err  = cv2.calcOpticalFlowPyrLK(image_1_pyramid[0], image_0_pyramid[0], np.array(next_pts, dtype=np.float32).reshape(-1, 2), None, status, err, WIN_SIZE, PYRAMID_DEPTH, (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, QUALITY_LEVEL))
 
     status = np.ravel(status)
     prev_status = prev_status.ravel()

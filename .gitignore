@@ -8,6 +8,10 @@ camtrack/video1.mov
 dataset/
 a.txt
 b.txt
+a.yml
+b.yml
+x.yml
+y.yml
 all.txt
 
 # Installer logs
