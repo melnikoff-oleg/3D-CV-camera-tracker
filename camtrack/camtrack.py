@@ -79,11 +79,6 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
         corrs = build_correspondences(corner_storage[frame_0], corner_storage[frame_1])
         return triangulate_correspondences(corrs, view_mats[frame_0], view_mats[frame_1], intrinsic_mat, params)
 
-    # debug tool
-    # real_t0 = known_view_1[1].t_vec
-    # real_t1 = known_view_2[1].t_vec
-    # real_viewmat0 = pose_to_view_mat3x4(known_view_1[1])
-    # real_viewmat1 = pose_to_view_mat3x4(known_view_2[1])
 
     #константы для инициализации
     BASELINE_THRESHOLD = 0.9
