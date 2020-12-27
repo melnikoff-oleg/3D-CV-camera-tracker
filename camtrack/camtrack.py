@@ -40,13 +40,13 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
     # функция для проверки что матрица поворота дейтсвительно матрица поворота
     def check_if_mat_is_rot_mat(mat):
         mat = mat[:, :3]
-        # print(mat.shape)
         det = np.linalg.det(mat)
+        # определитель должен быть = 1
         diff1 = abs(1 - det)
         x = mat @ mat.T
+        # обратная матрица должна получаться транспонированием
         diff2 = abs(np.sum(np.eye(3) - x))
         eps = 0.001
-        # print(diff1, diff2)
         return diff1 < eps and diff2 < eps
 
 
@@ -75,7 +75,8 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
                 frames_of_corner[j].append([i, id_in_list])
 
     #по двум кадрам находим общие точки и восстанавливаем их позиции в 3D
-    def triangulate(frame_0, frame_1, params=TriangulationParameters(2, 1e-3, 1e-4), ids_to_remove=None):
+    def triangulate(frame_0, frame_1, params=TriangulationParameters(2, 1e-3, 1e-4), ids_to_remove=None) \
+            -> Tuple[np.ndarray, np.ndarray, float]:
         corrs = build_correspondences(corner_storage[frame_0], corner_storage[frame_1])
         return triangulate_correspondences(corrs, view_mats[frame_0], view_mats[frame_1], intrinsic_mat, params)
 
@@ -172,7 +173,7 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
                         break
     
 
-
+    # крашаемся, если не удалось инициализироваться ни по какой паре кадров
     if ind is None:
         raise NotImplementedError()
 
@@ -182,7 +183,7 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
     ok, baseline, reproection_error, points3d_count, R, t = get_first_cam_pose(frame_0, frame_1)
     print('INITIALIZATION RESULTS:')
     print('FRAMES: frame_0={}, frame_1={}, total_frames={}'.format(frame_0, frame_1, frame_count))
-    print(ok, baseline, reproection_error, points3d_count, R, t)
+    print(baseline, reproection_error, points3d_count, R, t)
     view_mat0 = np.hstack((np.eye(3), np.zeros((3, 1))))
     view_mat1 = np.hstack((R, t.reshape((3, 1))))
     view_mats[frame_0] = view_mat0
@@ -191,8 +192,10 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
     t_vecs[frame_1] = t
 
 
-    points_cloud = {} # 'id': coords [., ., .] 3d coordinates, rays [(frame, coords)] - for new points addition
-
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # зачем хранить инфу о пендинг точках вперемешку с остальными точками облака???
+    # 'id': coords [., ., .] 3d coordinates, rays [(frame, coords)] - for new points addition
+    points_cloud = {}
 
 
     # инициализируем облако точек по 2 положениям
@@ -202,7 +205,8 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
     
 
     def find_camera_pose(frame_id):
-        # сначала находим инлаеры ранзаком, потом на инлаерах делаем пнп с итеративной мин кв
+        # сначала находим инлаеры ранзаком
+        # потом на инлаерах делаем пнп с итеративной мин кв
         corners = corner_storage[frame_id]
         points3d = []
         points2d = []
@@ -215,11 +219,12 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
         points2d = np.array(points2d, dtype=np.float64)
         if len(points3d) < 4:
             return None
-        try:
-            success, R, t, inliers = cv2.solvePnPRansac(objectPoints=points3d, imagePoints=points2d, cameraMatrix=intrinsic_mat, distCoeffs=None, flags=cv2.SOLVEPNP_EPNP, confidence=0.9995, reprojectionError=MAX_REPROJECTION_ERROR)
-        except Exception as e:
-            print(points3d.shape, points2d.shape)
-            raise e
+        
+        # выбираем эталонную 4 точек, строим по ней R и t
+        # затем смотрим, на какой выборке эталонных точек больше всего других точек 
+        # спроецируются корректно
+        success, R, t, inliers = cv2.solvePnPRansac(objectPoints=points3d, imagePoints=points2d, cameraMatrix=intrinsic_mat, distCoeffs=None, flags=cv2.SOLVEPNP_EPNP, confidence=0.9995, reprojectionError=MAX_REPROJECTION_ERROR)
+
         if not success:
             return None
 
@@ -231,6 +236,7 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
         retval, R, t = cv2.solvePnP(objectPoints=points3d, imagePoints=points2d, cameraMatrix=intrinsic_mat, distCoeffs=None, flags=cv2.SOLVEPNP_ITERATIVE, useExtrinsicGuess=True, rvec=R, tvec=t)
         return R, t, len(inliers)
 
+    # можно ускорить
     def frames_without_pose():
         frames = []
         for ind, mat in enumerate(view_mats):
@@ -241,6 +247,8 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
     
 
     def try_add_new_point_to_cloud(corner_id):
+        # все фреймы на которых есть данный уголок, и у которых уже найдена view_mat
+        # а можно для уголка хранить не все фреймы где он есть, а только те, где он инлаер!
         frames = []
         for frame in frames_of_corner[corner_id]:
             if view_mats[frame[0]] is not None:
@@ -252,10 +260,12 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
         best_frames = [None, None]
         best_ids = [None, None]
 
+        # можно ускорить хотя бы вдвое
         for frame_1 in frames:
             for frame_2 in frames:
                 if frame_1 == frame_2:
                     continue
+                # эм, по идее это не возможно, когда есть view_mat есть и t_vec
                 if t_vecs[frame_1[0]] is None or t_vecs[frame_2[0]] is None:
                     continue
                 t_vec_1 = t_vecs[frame_1[0]]
@@ -265,20 +275,25 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
                     max_dist = dist
                     best_frames = [frame_1[0], frame_2[0]]
                     best_ids = [frame_1[1], frame_2[1]]
+
         if max_dist > MIN_DIST_TRIANGULATE:
             ids = np.array([corner_id])
             points1 = corner_storage[best_frames[0]].points[np.array([best_ids[0]])]
             points2 = corner_storage[best_frames[1]].points[np.array([best_ids[1]])]
+            # что за ужасный синтаксис??????
             corrs = corrs = Correspondences(
                 ids,
                 points1,
                 points2
             )
             points3d, ids, med_cos = triangulate_correspondences(corrs, view_mats[best_frames[0]], view_mats[best_frames[1]], intrinsic_mat, parameters=TriangulationParameters(2, 1e-3, 1e-4))
+            # зачем проверка??? зачем делаем поп?????
             if len(points3d) > 0:
                 points_cloud[ids[0]] = points3d[0]
                 cur_corners_occurencies.pop(ids[0], None)
                 
+    # в этой функции мы еще бонусом возвращаем те точки, которые встречаются хотя бы 2 раза
+    # а также мы добавляем оккуранси тем точкам которые уже в облаке))))))))))))))))))))))))))))
     def add_corners_occurencies(frame_id):
         two_and_greater = []
         for id in corner_storage[frame_id].ids.flatten():
@@ -288,11 +303,12 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
                     two_and_greater.append(id)
         return two_and_greater
 
+    # очень эффективно))))))))))
     while len(frames_without_pose()) > 0:
         # пока есть не найденные положения камеры будем искать лучшее для восстановления
         # т.е. такое, где больше всего инлаеров после применения пнп ранзака
         wanted_frames = frames_without_pose()
-        inliers_amount = []
+        # inliers_amount = [] не понял зачем этот лист
         max_col = -1
         best_frame_id = -1
         best_R = None
@@ -309,6 +325,10 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
         if max_col == -1:
             # больше позиции камер не находятся
             break
+
+        view_mats[best_frame_id] = rodrigues_and_translation_to_view_mat3x4(best_R, best_t)
+        t_vecs[best_frame_id] = best_t
+
         try_add = add_corners_occurencies(best_frame_id)
         for corner in try_add:
             try_add_new_point_to_cloud(corner)
@@ -316,8 +336,7 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
         ttl_poses_calculated = np.sum([mat is not None for mat in view_mats])
         percent = "{:.0f}".format(ttl_poses_calculated / frame_count * 100.0)
         print('{}% poses calculated'.format(percent))
-        view_mats[best_frame_id] = rodrigues_and_translation_to_view_mat3x4(best_R, best_t)
-        t_vecs[best_frame_id] = best_t
+        
         print('{} points in 3D points cloud'.format(len(points_cloud)))
 
     last_view_mat = None
