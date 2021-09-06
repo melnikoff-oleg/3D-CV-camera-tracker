@@ -1,5 +1,6 @@
 # 3D-CV-camera-tracker
-Camera Tracker. Program takes video and gives 3D-positions of camera and points cloud on every frame
+Program takes video or simply sequence of frames and gives 3D-positions of camera and points cloud on every frame of the video
 
-1. pip install -r requirements
-2. use file camtrack.py to execute camera tracker. check it's CLI with -h
+## Usage
+1. ```pip install -r requirements```
+2. Use file camtrack/camtrack.py to execute camera tracker. You need to pass path to video file via command line. Check CLI of this file with -h cmd arg
