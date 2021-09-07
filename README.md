@@ -1,5 +1,5 @@
 # 3D-CV-camera-tracker
-Program takes video or simply sequence of frames and gives 3D-positions of camera and points cloud on every frame of the video
+Program takes video or simply sequence of frames and gives 3D-positions of camera and scene points cloud on every frame of the video
 
 ## Usage
 1. ```pip install -r requirements.txt```
