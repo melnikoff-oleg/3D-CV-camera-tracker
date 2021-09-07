@@ -3,4 +3,4 @@ Program takes video or simply sequence of frames and gives 3D-positions of camer
 
 ## Usage
 1. ```pip install -r requirements.txt```
-2. Use file camtrack/camtrack.py to execute camera tracker. You need to pass path to video file via command line. Check CLI of this file with -h cmd arg
+2. Use file camtrack/camtrack.py to execute camera tracker. You need to pass path to video file via command line. Check CLI with camtrack/camtrack.py -h cmd arg
